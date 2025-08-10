@@ -4,9 +4,6 @@ from PIL import Image
 import io
 import os
 
-# ដាក់ Tesseract executable path (ប្រសិនបើមិនមាននៅក្នុង system PATH)
-# ឧទាហរណ៍សម្រាប់ Windows:
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # ជំនួស 'YOUR_BOT_TOKEN' ជាមួយ Token របស់ Bot អ្នក
 API_TOKEN = '7328885744:AAGDvDt85Se9oenNL-tAxr9MIMkU7ytuN30'
