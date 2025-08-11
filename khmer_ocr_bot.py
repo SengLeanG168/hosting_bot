@@ -1,16 +1,18 @@
+
+# --- Flask Webhook Version for Render Web Service ---
 import telebot
 import pytesseract
 from PIL import Image
 import io
 import os
+from flask import Flask, request
 
-
-# ជំនួស 'YOUR_BOT_TOKEN' ជាមួយ Token របស់ Bot អ្នក
 API_TOKEN = '7328885744:AAGDvDt85Se9oenNL-tAxr9MIMkU7ytuN30'
+WEBHOOK_URL = os.environ.get('WEBHOOK_URL')  # Set this in Render environment variables
+
 bot = telebot.TeleBot(API_TOKEN)
+app = Flask(__name__)
 
-
-# Keep track of users who have started the bot
 started_users = set()
 
 @bot.message_handler(commands=['start'])
@@ -27,8 +29,6 @@ Please send an image to me for conversion from image to text.
 """
     bot.reply_to(message, welcome_message)
 
-# មុខងារសម្រាប់ទទួលរូបភាព
-
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_image(message):
     user_id = message.from_user.id
@@ -36,10 +36,7 @@ def handle_image(message):
         bot.reply_to(message, "សូមចុច /start ជាមុនសិន ដើម្បីប្រើប្រាស់ bot នេះ។\nPlease send /start first to use this bot.")
         return
     try:
-        # ផ្ញើសារប្រាប់ថា Bot កំពុងដំណើរការបម្លែង
         processing_message = bot.reply_to(message, "កំពុងបម្លែងរូបភាពទៅជាអក្សរ...")
-
-        # ទទួលរូបភាព
         if message.content_type == 'photo':
             file_info = bot.get_file(message.photo[-1].file_id)
         elif message.content_type == 'document' and 'image' in message.document.mime_type:
@@ -47,30 +44,42 @@ def handle_image(message):
         else:
             bot.edit_message_text(chat_id=message.chat.id, message_id=processing_message.message_id, text="សូមមេត្តាផ្ញើតែរូបភាពប៉ុណ្ណោះ។")
             return
-
         downloaded_file = bot.download_file(file_info.file_path)
-
-        # បើករូបភាពដោយប្រើ PIL
         image_stream = io.BytesIO(downloaded_file)
         img = Image.open(image_stream)
-
-        # ប្រើ Tesseract OCR ជាមួយភាសាខ្មែរនិងអង់គ្លេស
-        # ប្រើ option '--psm 6' សម្រាប់បម្លែងរូបភាពដែលមានអក្សរជាជួរៗ
-        # option 'config' នេះជួយឱ្យការបម្លែងបានល្អជាងមុន
         ocr_result = pytesseract.image_to_string(img, lang='khm+eng', config='--psm 6')
-
-        # ផ្ញើលទ្ធផលទៅអ្នកប្រើ
-        if ocr_result.strip():  # ពិនិត្យមើលថាតើលទ្ធផលមានអក្សរឬអត់
+        if ocr_result.strip():
             bot.edit_message_text(chat_id=message.chat.id, message_id=processing_message.message_id, text=ocr_result)
         else:
             bot.edit_message_text(chat_id=message.chat.id, message_id=processing_message.message_id, text="មិនអាចស្គាល់អក្សរបានទេ សូមផ្ញើរូបភាពដែលច្បាស់ជាងមុន។")
-
     except Exception as e:
-        # ដោះស្រាយករណីមានកំហុស
         error_message = f"មានកំហុស៖ {e}"
         bot.edit_message_text(chat_id=message.chat.id, message_id=processing_message.message_id, text=error_message)
         print(f"Error occurred: {e}")
 
-# ចាប់ផ្ដើម Bot
-print("Bot is running...")
-bot.polling(none_stop=True)
+# Flask route for Telegram webhook
+@app.route(f"/webhook/{API_TOKEN}", methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return '', 200
+    else:
+        return '', 403
+
+@app.route('/')
+def index():
+    return 'Telegram Khmer OCR Bot is running!'
+
+if __name__ == "__main__":
+    # Set webhook
+    if WEBHOOK_URL:
+        full_webhook_url = f"{WEBHOOK_URL}/webhook/{API_TOKEN}"
+        bot.remove_webhook()
+        bot.set_webhook(url=full_webhook_url)
+        print(f"Webhook set to: {full_webhook_url}")
+    else:
+        print("WEBHOOK_URL environment variable not set!")
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host="0.0.0.0", port=port)
